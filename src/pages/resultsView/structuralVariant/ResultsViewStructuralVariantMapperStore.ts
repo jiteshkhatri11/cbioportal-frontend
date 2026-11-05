@@ -60,6 +60,7 @@ export class ResultsViewStructuralVariantMapperStore {
                     transcriptIds.add(fusion.site1EnsemblTranscriptId);
                     transcriptIds.add(fusion.site2EnsemblTranscriptId);
                 });
+
                 // Fetch ensembl transcript data with transcript ids as request params
                 return await fetchEnsemblTranscriptsByEnsemblFilter(
                     {
@@ -78,11 +79,14 @@ export class ResultsViewStructuralVariantMapperStore {
                 // Collect all transcript id's from the fusion data
                 const hugoSymbols = new Set<string>();
                 this.fusions.forEach((fusion: StructuralVariant) => {
-                    if (fusion.site1HugoSymbol)
+                    if (fusion.site1HugoSymbol) {
                         hugoSymbols.add(fusion.site1HugoSymbol);
-                    if (fusion.site2HugoSymbol)
+                    }
+                    if (fusion.site2HugoSymbol) {
                         hugoSymbols.add(fusion.site2HugoSymbol);
+                    }
                 });
+
                 // Fetch ensembl transcript data with transcript ids as request params
                 return await fetchCanonicalTranscripts(
                     Array.from(hugoSymbols),
@@ -106,6 +110,7 @@ export class ResultsViewStructuralVariantMapperStore {
             const transcriptId = transcript.transcriptId;
             transcriptToExons.set(transcriptId, transcript.exons);
         });
+
         canonicalTranscripts.forEach(transcript => {
             const hugoSymbol = transcript.hugoSymbols?.[0];
             transcriptToExons.set(hugoSymbol, transcript.exons);
@@ -119,6 +124,10 @@ export class ResultsViewStructuralVariantMapperStore {
         const fusionData = (
             this.fusions || []
         ).map((fusion: StructuralVariant) => [fusion]);
-        return new ResultViewFusionMapperDataStore(fusionData);
+
+        return new ResultViewFusionMapperDataStore(
+            fusionData,
+            this.gene.hugoGeneSymbol
+        );
     }
 }

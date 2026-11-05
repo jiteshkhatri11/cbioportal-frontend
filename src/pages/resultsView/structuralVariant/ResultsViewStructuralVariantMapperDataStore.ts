@@ -12,7 +12,10 @@ import { StructuralVariant } from 'cbioportal-ts-api-client';
 export default class ResultsViewStructuralVariantMapperDataStore extends SimpleLazyMobXTableApplicationDataStore<
     StructuralVariant[]
 > {
-    constructor(data: StructuralVariant[][]) {
+    constructor(
+        data: StructuralVariant[][],
+        private readonly queriedGeneSymbol: string
+    ) {
         super(data);
         makeObservable(this);
     }
@@ -27,11 +30,42 @@ export default class ResultsViewStructuralVariantMapperDataStore extends SimpleL
         return _.chain(this.tableData)
             .flatten()
             .groupBy(structuralVariant => {
-                // key = <patient>_<gene1chromosome>_<gene1position>_<gene2chromosome>_<gene2position>
                 return `${structuralVariant.patientId}_${structuralVariant.site1Chromosome}_${structuralVariant.site1Position}_${structuralVariant.site2Chromosome}_${structuralVariant.site2Position}`;
             })
             .map(countMapper)
             .reduce(sumReducer, 0)
             .value();
+    }
+
+    @computed
+    get genePartnerCounts(): { [partner: string]: number } {
+        const counts: { [partner: string]: number } = {};
+        const queriedGene = this.queriedGeneSymbol.toUpperCase();
+
+        _.flatten(this.tableData).forEach(structuralVariant => {
+            const site1Gene = structuralVariant.site1HugoSymbol;
+            const site2Gene = structuralVariant.site2HugoSymbol;
+
+            if (!site1Gene || !site2Gene) {
+                return;
+            }
+
+            const normalizedSite1 = site1Gene.toUpperCase();
+            const normalizedSite2 = site2Gene.toUpperCase();
+
+            if (
+                normalizedSite1 === queriedGene &&
+                normalizedSite2 !== queriedGene
+            ) {
+                counts[normalizedSite2] = (counts[normalizedSite2] || 0) + 1;
+            } else if (
+                normalizedSite2 === queriedGene &&
+                normalizedSite1 !== queriedGene
+            ) {
+                counts[normalizedSite1] = (counts[normalizedSite1] || 0) + 1;
+            }
+        });
+
+        return counts;
     }
 }

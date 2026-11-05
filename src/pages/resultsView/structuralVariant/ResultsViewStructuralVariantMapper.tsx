@@ -8,6 +8,7 @@ import * as React from 'react';
 import ResultsViewStructuralVariantTable from './ResultsViewStructuralVariantTable';
 import { observer } from 'mobx-react';
 import { ResultsViewStructuralVariantMapperStore } from './ResultsViewStructuralVariantMapperStore';
+import ResultsViewStructuralVariantMapperDataStore from './ResultsViewStructuralVariantMapperDataStore';
 import LoadingIndicator from '../../../shared/components/loadingIndicator/LoadingIndicator';
 import { action, computed, makeObservable, observable } from 'mobx';
 import {
@@ -27,6 +28,7 @@ export default class ResultsViewStructuralVariantMapper extends React.Component<
     {}
 > {
     @observable mergeFusionTableOncoKbIcons;
+    @observable selectedGenePartner: string | undefined = undefined;
 
     constructor(props: IFusionMapperProps) {
         super(props);
@@ -41,7 +43,46 @@ export default class ResultsViewStructuralVariantMapper extends React.Component<
         saveOncoKbIconStyleToLocalStorage({ mergeIcons });
     }
 
-    @computed get itemsLabelPlural(): string {
+    @action.bound
+    selectGenePartner(partner: string) {
+        this.selectedGenePartner =
+            this.selectedGenePartner === partner ? undefined : partner;
+    }
+
+    @action.bound
+    clearGenePartnerFilter() {
+        this.selectedGenePartner = undefined;
+    }
+
+    @computed
+    get displayedDataStore(): ResultsViewStructuralVariantMapperDataStore {
+        const { store } = this.props;
+
+        if (!this.selectedGenePartner) {
+            return store.dataStore;
+        }
+
+        const queriedGene = store.gene.hugoGeneSymbol.toUpperCase();
+        const selectedPartner = this.selectedGenePartner.toUpperCase();
+
+        const filteredFusions = store.fusions.filter(fusion => {
+            const site1Gene = fusion.site1HugoSymbol?.toUpperCase();
+            const site2Gene = fusion.site2HugoSymbol?.toUpperCase();
+
+            return (
+                (site1Gene === queriedGene && site2Gene === selectedPartner) ||
+                (site2Gene === queriedGene && site1Gene === selectedPartner)
+            );
+        });
+
+        return new ResultsViewStructuralVariantMapperDataStore(
+            filteredFusions.map(fusion => [fusion]),
+            store.gene.hugoGeneSymbol
+        );
+    }
+
+    @computed
+    get itemsLabelPlural(): string {
         const count = this.props.store.dataStore
             .duplicateStructuralVariantCountInMultipleSamples;
         const structuralVariantsLabel =
@@ -55,6 +96,91 @@ export default class ResultsViewStructuralVariantMapper extends React.Component<
         return `Structural Variants${multipleStructuralVariantInfo}`;
     }
 
+    @computed
+    get genePartnerChart(): JSX.Element {
+        const partnerCounts = this.props.store.dataStore.genePartnerCounts;
+
+        const partners = Object.keys(partnerCounts).sort(
+            (a, b) => partnerCounts[b] - partnerCounts[a]
+        );
+
+        const maxCount = partners.reduce(
+            (max, partner) => Math.max(max, partnerCounts[partner]),
+            0
+        );
+
+        if (partners.length === 0) {
+            return <div>No gene partners found.</div>;
+        }
+
+        return (
+            <div className="borderedChart">
+                <h4>
+                    Gene partners for {this.props.store.gene.hugoGeneSymbol}
+                </h4>
+
+                {partners.map(partner => (
+                    <button
+                        key={partner}
+                        type="button"
+                        className={
+                            this.selectedGenePartner === partner
+                                ? 'btn btn-primary'
+                                : 'btn btn-default'
+                        }
+                        onClick={() => this.selectGenePartner(partner)}
+                        aria-pressed={this.selectedGenePartner === partner}
+                        style={{
+                            display: 'block',
+                            width: '100%',
+                            textAlign: 'left',
+                            marginBottom: '8px',
+                            padding: '8px',
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                            }}
+                        >
+                            <span>{partner}</span>
+                            <strong>{partnerCounts[partner]}</strong>
+                        </div>
+
+                        <div
+                            style={{
+                                height: '8px',
+                                backgroundColor: '#eeeeee',
+                                marginTop: '5px',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    height: '8px',
+                                    width: `${(partnerCounts[partner] /
+                                        maxCount) *
+                                        100}%`,
+                                    backgroundColor: '#337ab7',
+                                }}
+                            />
+                        </div>
+                    </button>
+                ))}
+
+                {this.selectedGenePartner && (
+                    <button
+                        type="button"
+                        className="btn btn-link"
+                        onClick={this.clearGenePartnerFilter}
+                    >
+                        Clear partner filter
+                    </button>
+                )}
+            </div>
+        );
+    }
+
     tableUI = MakeMobxView({
         await: () => [
             this.props.store.studyIdToStudy,
@@ -64,8 +190,10 @@ export default class ResultsViewStructuralVariantMapper extends React.Component<
         render: () => {
             return (
                 <>
+                    {this.genePartnerChart}
+
                     <ResultsViewStructuralVariantTable
-                        dataStore={this.props.store.dataStore}
+                        dataStore={this.displayedDataStore}
                         itemsLabelPlural={this.itemsLabelPlural}
                         studyIdToStudy={this.props.store.studyIdToStudy.result}
                         molecularProfileIdToMolecularProfile={
